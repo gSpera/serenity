@@ -903,6 +903,48 @@ void TextEditor::keydown_event(KeyEvent& event)
         return;
     }
 
+    if (event.key() == KeyCode::Key_Tab && m_selection.is_valid()) {
+        size_t first_line = m_selection.start().line();
+        size_t last_line = m_selection.end().line();
+        TextPosition& selection_start = m_selection.start();
+        TextPosition& selection_end = m_selection.end();
+
+        if (last_line < first_line) {
+            size_t tmp = last_line;
+            last_line = first_line;
+            first_line = tmp;
+        }
+
+        if (event.modifiers() != Mod_Shift) {
+            for (size_t i = first_line; i <= last_line; i++) {
+                for (size_t j = 0; j < m_soft_tab_width; j++)
+                    line(i).prepend(document(), ' ');
+            }
+            m_selection.start().set_column(m_selection.start().column() + m_soft_tab_width);
+            m_selection.end().set_column(m_selection.end().column() + m_soft_tab_width);
+            m_cursor.set_column(m_cursor.column() + m_soft_tab_width);
+        } else {
+            size_t to_remove_at_start = min(m_soft_tab_width, line(selection_start.line()).first_non_whitespace_column());
+            size_t to_remove_at_end = min(m_soft_tab_width, line(selection_end.line()).first_non_whitespace_column());
+
+            for (size_t i = first_line; i <= last_line; i++) {
+                size_t to_remove = min(m_soft_tab_width, line(i).first_non_whitespace_column());
+                line(i).remove_range(document(), 0, to_remove);
+            }
+
+            if (selection_start.column() < to_remove_at_start)
+                selection_start.set_column(to_remove_at_start);
+            if (selection_end.column() < to_remove_at_end)
+                selection_end.set_column(to_remove_at_end);
+            selection_start.set_column(selection_start.column() - to_remove_at_start);
+            selection_end.set_column(selection_end.column() - to_remove_at_end);
+            m_cursor.set_column(selection_end.column());
+        }
+
+        update();
+        return;
+    }
+
     if (!event.ctrl() && !event.alt() && event.code_point() != 0) {
         TemporaryChange change { m_should_keep_autocomplete_box, true };
         add_code_point(event.code_point());
